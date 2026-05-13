@@ -28,7 +28,8 @@ fn syscall(id: usize, args: [usize; 3]) -> isize {
 }
 
 pub fn sys_exit(xstate: i32) -> isize {
-    syscall(SYSCALL_EXIT, [xstate as usize, 0, 0])
+    syscall(SYSCALL_EXIT, [xstate as usize, 0, 0]);
+    loop {}
 }
 
 pub fn sys_write(fd: usize, buffer: &[u8]) -> isize {
@@ -51,14 +52,14 @@ pub fn print(args: fmt::Arguments) {
 macro_rules! print {
     ($fmt: literal $(, $($arg: tt)+)?) => {
         $crate::print(format_args!($fmt $(, $($arg)+)?));
-    }
+    };
 }
 
 #[macro_export]
 macro_rules! println {
     ($fmt: literal $(, $($arg: tt)+)?) => {
         print(format_args!(concat!($fmt, "\n") $(, $($arg)+)?));
-    }
+    };
 }
 
 #[unsafe(no_mangle)]
