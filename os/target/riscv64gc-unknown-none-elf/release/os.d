@@ -1,0 +1,1 @@
+/mnt/c/Users/Asus/GardenerOS/os/target/riscv64gc-unknown-none-elf/release/os: /mnt/c/Users/Asus/GardenerOS/os/src/console.rs /mnt/c/Users/Asus/GardenerOS/os/src/entry.asm /mnt/c/Users/Asus/GardenerOS/os/src/lang_items.rs /mnt/c/Users/Asus/GardenerOS/os/src/main.rs /mnt/c/Users/Asus/GardenerOS/os/src/sbi.rs
