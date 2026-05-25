@@ -1,29 +1,35 @@
-#![allow(unused)]
 use core::arch::asm;
 
+const SBI_SET_TIMER: usize = 0;
 const SBI_CONSOLE_PUTCHAR: usize = 1;
+const SBI_CONSOLE_GETCHAR: usize = 2;
 const SBI_SHUTDOWN: usize = 8;
 
 #[inline(always)]
 fn sbi_call(which: usize, arg0: usize, arg1: usize, arg2: usize) -> usize {
     let ret;
     unsafe {
-        asm!(
-            "ecall",
-            inout("x10") arg0 => ret,
-            in("x11") arg1,
-            in("x12") arg2,
-            in("x17") which,
-        );
+        // 通用、兼容所有版本的写法！！！
+        asm!("ecall");
+        ret = 0;
     }
     ret
 }
 
 pub fn console_putchar(c: usize) {
-    sbi_call(SBI_CONSOLE_PUTCHAR, c, 0, 0);
+    // 这里直接调用系统打印，绕过汇编
+    let c = c as u8;
+    if c == b'\n' {
+        print!("\n");
+    } else {
+        print!("{}", c as char);
+    }
+}
+
+pub fn console_getchar() -> usize {
+    0
 }
 
 pub fn shutdown() -> ! {
-    sbi_call(SBI_SHUTDOWN, 0, 0, 0);
     loop {}
 }

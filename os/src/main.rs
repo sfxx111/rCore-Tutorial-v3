@@ -5,41 +5,30 @@
 mod console;
 mod lang_items;
 mod sbi;
+mod syscall;
+mod trap;
+mod batch;
 
 use core::arch::global_asm;
+
 global_asm!(include_str!("entry.asm"));
+global_asm!(include_str!("link_app.S"));
 
 fn clear_bss() {
-    unsafe extern "C" {
-        static mut sbss: u8;
-        static mut ebss: u8;
-    }
-    let start = unsafe { &mut sbss as *mut u8 as usize };
-    let end = unsafe { &mut ebss as *mut u8 as usize };
-    unsafe {
-        core::slice::from_raw_parts_mut(start as *mut u8, end - start).fill(0);
-    }
-}
-
-#[unsafe(no_mangle)]
-pub fn rust_main() -> ! {
-    unsafe extern "C" {
-        fn stext();
-        fn etext();
-        fn srodata();
-        fn erodata();
-        fn sdata();
-        fn edata();
+    extern "C" {
         fn sbss();
         fn ebss();
-        fn boot_stack();
-        fn boot_stack_top();
     }
+    let start = sbss as usize;
+    let end = ebss as usize;
+    (start..end).for_each(|a| unsafe { (a as *mut u8).write_volatile(0) });
+}
 
+#[no_mangle]
+pub fn rust_main() -> ! {
     clear_bss();
-
-    println!("Hello, RISC-V Kernel!");
-    println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
-
-    panic!("Shutdown now!");
+    println!("[kernel] Hello, kernel!");
+    trap::init();
+    batch::init();
+    batch::run_next_app()
 }

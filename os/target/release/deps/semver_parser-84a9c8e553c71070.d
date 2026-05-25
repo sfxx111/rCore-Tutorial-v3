@@ -1,0 +1,11 @@
+/mnt/c/Users/Asus/GardenerOS/os/target/release/deps/semver_parser-84a9c8e553c71070.d: /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/lib.rs /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/version.rs /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/range.rs /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/common.rs /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/recognize.rs
+
+/mnt/c/Users/Asus/GardenerOS/os/target/release/deps/libsemver_parser-84a9c8e553c71070.rlib: /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/lib.rs /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/version.rs /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/range.rs /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/common.rs /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/recognize.rs
+
+/mnt/c/Users/Asus/GardenerOS/os/target/release/deps/libsemver_parser-84a9c8e553c71070.rmeta: /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/lib.rs /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/version.rs /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/range.rs /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/common.rs /home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/recognize.rs
+
+/home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/lib.rs:
+/home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/version.rs:
+/home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/range.rs:
+/home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/common.rs:
+/home/asus/.cargo/registry/src/mirrors.ustc.edu.cn-38d0e5eb5da2abae/semver-parser-0.7.0/src/recognize.rs:

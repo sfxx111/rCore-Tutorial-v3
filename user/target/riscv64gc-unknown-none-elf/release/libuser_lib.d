@@ -1,0 +1,1 @@
+/home/asus/GardenerOS/user/target/riscv64gc-unknown-none-elf/release/libuser_lib.rlib: /home/asus/GardenerOS/user/src/console.rs /home/asus/GardenerOS/user/src/lang_items.rs /home/asus/GardenerOS/user/src/lib.rs /home/asus/GardenerOS/user/src/syscall.rs
