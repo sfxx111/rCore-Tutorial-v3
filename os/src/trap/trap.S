@@ -2,7 +2,6 @@
 .macro SAVE_GP n
     sd x\n, \n*8(sp)
 .endm
-
 .macro LOAD_GP n
     ld x\n, \n*8(sp)
 .endm
@@ -10,8 +9,8 @@
     .section .text
     .globl __alltraps
     .globl __restore
+    .extern trap_handler
     .align 2
-
 __alltraps:
     csrrw sp, sscratch, sp
     addi sp, sp, -34*8
@@ -41,7 +40,7 @@ __restore:
     csrw sscratch, t2
     ld x1, 1*8(sp)
     ld x3, 3*8(sp)
-    .set n,5
+    .set n, 5
     .rept 27
         LOAD_GP %n
         .set n, n+1

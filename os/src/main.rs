@@ -10,25 +10,24 @@ mod trap;
 mod batch;
 
 use core::arch::global_asm;
-
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("link_app.S"));
 
 fn clear_bss() {
-    extern "C" {
+    unsafe extern "C" {
         fn sbss();
         fn ebss();
     }
-    let start = sbss as usize;
-    let end = ebss as usize;
-    (start..end).for_each(|a| unsafe { (a as *mut u8).write_volatile(0) });
+    let sbss_ptr = sbss as *const () as usize;
+    let ebss_ptr = ebss as *const () as usize;
+    (sbss_ptr..ebss_ptr).for_each(|a| unsafe { (a as *mut u8).write_volatile(0) });
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub fn rust_main() -> ! {
     clear_bss();
-    println!("[kernel] Hello, kernel!");
+    println!("[Kernel] Hello, world!");
     trap::init();
     batch::init();
-    batch::run_next_app()
+    batch::run_next_app();
 }

@@ -1,6 +1,6 @@
 use core::arch::asm;
 use core::cell::RefCell;
-use lazy_static::lazy_static;
+use lazy_static::*;
 use crate::trap::TrapContext;
 
 const MAX_APP_NUM: usize = 16;
@@ -28,8 +28,9 @@ impl KernelStack {
         self.data.as_ptr() as usize + KERNEL_STACK_SIZE
     }
     pub fn push_context(&self, cx: TrapContext) -> &'static mut TrapContext {
-        let p = (self.get_sp() - core::mem::size_of::<TrapContext>()) as *mut TrapContext;
-        unsafe { *p = cx; p.as_mut().unwrap() }
+        let cx_ptr = (self.get_sp() - core::mem::size_of::<TrapContext>()) as *mut TrapContext;
+        unsafe { *cx_ptr = cx; }
+        unsafe { cx_ptr.as_mut().unwrap() }
     }
 }
 
@@ -39,66 +40,87 @@ impl UserStack {
     }
 }
 
+struct AppManager {
+    inner: RefCell<AppManagerInner>,
+}
+
 struct AppManagerInner {
     num_app: usize,
     current_app: usize,
     app_start: [usize; MAX_APP_NUM + 1],
 }
 
-struct AppManager {
-    inner: RefCell<AppManagerInner>,
-}
-
 unsafe impl Sync for AppManager {}
+
+impl AppManagerInner {
+    pub fn print_app_info(&self) {
+        println!("[kernel] num_app = {}", self.num_app);
+        for i in 0..self.num_app {
+            println!("[kernel] app_{} [{:#x}, {:#x})", i, self.app_start[i], self.app_start[i + 1]);
+        }
+    }
+
+    unsafe fn load_app(&self, app_id: usize) {
+        if app_id >= self.num_app {
+            panic!("All applications completed!");
+        }
+        println!("[kernel] Loading app_{}", app_id);
+        asm!("fence.i");
+        (APP_BASE_ADDRESS..APP_BASE_ADDRESS + APP_SIZE_LIMIT).for_each(|addr| {
+            unsafe { (addr as *mut u8).write_volatile(0); }
+        });
+        let app_src = unsafe {
+            core::slice::from_raw_parts(
+                self.app_start[app_id] as *const u8,
+                self.app_start[app_id + 1] - self.app_start[app_id]
+            )
+        };
+        let app_dst = unsafe {
+            core::slice::from_raw_parts_mut(
+                APP_BASE_ADDRESS as *mut u8,
+                app_src.len()
+            )
+        };
+        app_dst.copy_from_slice(app_src);
+    }
+
+    pub fn get_current_app(&self) -> usize { self.current_app }
+
+    pub fn move_to_next_app(&mut self) { self.current_app += 1; }
+}
 
 lazy_static! {
     static ref APP_MANAGER: AppManager = AppManager {
         inner: RefCell::new({
-            extern "C" { fn _num_app(); }
-            let ptr = _num_app as *const usize;
-            let n = unsafe { *ptr };
-            let mut arr = [0; MAX_APP_NUM+1];
-            let v = unsafe { core::slice::from_raw_parts(ptr.add(1), n+1) };
-            arr[..=n].copy_from_slice(v);
+            unsafe extern "C" { fn _num_app(); }
+            let num_app_ptr = _num_app as *const () as *const usize;
+            let num_app = unsafe { num_app_ptr.read_volatile() };
+            let mut app_start: [usize; MAX_APP_NUM + 1] = [0; MAX_APP_NUM + 1];
+            let app_start_raw: &[usize] = unsafe {
+                core::slice::from_raw_parts(num_app_ptr.add(1), num_app + 1)
+            };
+            app_start[..=num_app].copy_from_slice(app_start_raw);
             AppManagerInner {
-                num_app: n,
+                num_app,
                 current_app: 0,
-                app_start: arr,
+                app_start,
             }
-        })
+        }),
     };
 }
 
-impl AppManagerInner {
-    pub fn print_info(&self) {
-        println!("[kernel] num_app={}", self.num_app);
-        for i in 0..self.num_app {
-            println!("[kernel] app_{} [{:#x}, {:#x})", i, self.app_start[i], self.app_start[i+1]);
-        }
-    }
-
-    unsafe fn load_app(&self, id: usize) {
-        if id >= self.num_app { panic!("All done!"); }
-        println!("[kernel] Loading app_{}", id);
-        asm!("fence.i");
-        (APP_BASE_ADDRESS..APP_BASE_ADDRESS+APP_SIZE_LIMIT).for_each(|a| (a as *mut u8).write_volatile(0));
-        let src = core::slice::from_raw_parts(self.app_start[id] as *const u8, self.app_start[id+1]-self.app_start[id]);
-        let dst = core::slice::from_raw_parts_mut(APP_BASE_ADDRESS as *mut u8, src.len());
-        dst.copy_from_slice(src);
-    }
-}
-
-pub fn init() {
-    APP_MANAGER.inner.borrow().print_info();
-}
+pub fn init() { print_app_info(); }
+pub fn print_app_info() { APP_MANAGER.inner.borrow().print_app_info(); }
 
 pub fn run_next_app() -> ! {
-    let cur = APP_MANAGER.inner.borrow().current_app;
-    unsafe { APP_MANAGER.inner.borrow().load_app(cur); }
-    APP_MANAGER.inner.borrow_mut().current_app += 1;
-    extern "C" { fn __restore(_: usize); }
-    let cx = TrapContext::app_init_context(APP_BASE_ADDRESS, USER_STACK.get_sp());
-    let p = KERNEL_STACK.push_context(cx);
-    unsafe { __restore(p as *mut TrapContext as usize); }
-    loop {}
+    let current_app = APP_MANAGER.inner.borrow().get_current_app();
+    unsafe { APP_MANAGER.inner.borrow().load_app(current_app); }
+    APP_MANAGER.inner.borrow_mut().move_to_next_app();
+    unsafe extern "C" { fn __restore(cx_addr: usize); }
+    unsafe {
+        __restore(KERNEL_STACK.push_context(
+            TrapContext::app_init_context(APP_BASE_ADDRESS, USER_STACK.get_sp())
+        ) as *const _ as usize);
+    }
+    panic!("Unreachable in batch::run_current_app!");
 }

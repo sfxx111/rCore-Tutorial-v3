@@ -12,6 +12,7 @@ pub fn write(fd: usize, buf: &[u8]) -> isize { sys_write(fd, buf) }
 pub fn exit(exit_code: i32) -> isize { sys_exit(exit_code) }
 
 fn clear_bss() {
+    // 新版 Rust 要求外部符号块必须标记为 unsafe
     unsafe extern "C" {
         fn start_bss();
         fn end_bss();
@@ -21,6 +22,7 @@ fn clear_bss() {
     (start_bss_ptr..end_bss_ptr).for_each(|a| unsafe { (a as *mut u8).write_volatile(0) });
 }
 
+// 新版 Rust 要求底层不安全属性（如 no_mangle 和 link_section）必须包裹在 unsafe(...) 中
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.entry")]
 pub extern "C" fn _start() -> ! {

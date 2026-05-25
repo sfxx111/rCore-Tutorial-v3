@@ -1,4 +1,4 @@
-use riscv::register::sstatus::{self, Sstatus, SPP};
+use riscv::register::sstatus::{Sstatus, self, SPP};
 
 #[repr(C)]
 pub struct TrapContext {
@@ -12,7 +12,11 @@ impl TrapContext {
     pub fn app_init_context(entry: usize, sp: usize) -> Self {
         let mut sstatus = sstatus::read();
         sstatus.set_spp(SPP::User);
-        let mut cx = Self { x: [0; 32], sstatus, sepc: entry };
+        let mut cx = Self {
+            x: [0; 32],
+            sstatus,
+            sepc: entry,
+        };
         cx.set_sp(sp);
         cx
     }
