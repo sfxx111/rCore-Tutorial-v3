@@ -1,1 +1,0 @@
-/home/asus/GardenerOS/user/target/riscv64gc-unknown-none-elf/release/01store_fault: /home/asus/GardenerOS/user/src/bin/01store_fault.rs /home/asus/GardenerOS/user/src/console.rs /home/asus/GardenerOS/user/src/lang_items.rs /home/asus/GardenerOS/user/src/lib.rs /home/asus/GardenerOS/user/src/syscall.rs

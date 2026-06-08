@@ -10,6 +10,7 @@ use syscall::*;
 
 pub fn write(fd: usize, buf: &[u8]) -> isize { sys_write(fd, buf) }
 pub fn exit(exit_code: i32) -> isize { sys_exit(exit_code) }
+pub fn get_time() -> isize { sys_get_time() }
 
 fn clear_bss() {
     // 新版 Rust 要求外部符号块必须标记为 unsafe
