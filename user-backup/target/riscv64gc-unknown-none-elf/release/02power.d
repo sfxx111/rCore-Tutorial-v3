@@ -1,0 +1,1 @@
+/mnt/c/Users/Asus/GardenerOS/user/target/riscv64gc-unknown-none-elf/release/02power: /mnt/c/Users/Asus/GardenerOS/user/src/bin/02power.rs /mnt/c/Users/Asus/GardenerOS/user/src/console.rs /mnt/c/Users/Asus/GardenerOS/user/src/lang_items.rs /mnt/c/Users/Asus/GardenerOS/user/src/lib.rs /mnt/c/Users/Asus/GardenerOS/user/src/syscall.rs

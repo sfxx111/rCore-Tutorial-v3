@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+use core::arch::global_asm;
 
 #[macro_use]
 mod console;
@@ -7,14 +8,15 @@ mod lang_items;
 mod sbi;
 mod syscall;
 mod trap;
-mod batch;
+mod loader;
+mod config;
+mod task;
 
-use core::arch::global_asm;
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("link_app.S"));
 
 fn clear_bss() {
-    unsafe extern "C" {
+    extern "C" {
         fn sbss();
         fn ebss();
     }
@@ -23,11 +25,12 @@ fn clear_bss() {
     (sbss_ptr..ebss_ptr).for_each(|a| unsafe { (a as *mut u8).write_volatile(0) });
 }
 
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub fn rust_main() -> ! {
     clear_bss();
-    println!("[Kernel] Hello, world!");
+    println!("[kernel] Hello, world!");
     trap::init();
-    batch::init();
-    batch::run_next_app();
+    loader::load_apps();
+    task::run_first_task();
+    panic!("Unreachable in rust_main!");
 }

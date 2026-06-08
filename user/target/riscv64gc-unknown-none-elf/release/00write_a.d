@@ -1,0 +1,1 @@
+/home/asus/GardenerOS/user/target/riscv64gc-unknown-none-elf/release/00write_a: /home/asus/GardenerOS/user/src/bin/00write_a.rs /home/asus/GardenerOS/user/src/console.rs /home/asus/GardenerOS/user/src/lang_items.rs /home/asus/GardenerOS/user/src/lib.rs /home/asus/GardenerOS/user/src/syscall.rs

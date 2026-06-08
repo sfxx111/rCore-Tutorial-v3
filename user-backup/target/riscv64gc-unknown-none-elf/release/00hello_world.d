@@ -1,0 +1,1 @@
+/mnt/c/Users/Asus/GardenerOS/user/target/riscv64gc-unknown-none-elf/release/00hello_world: /mnt/c/Users/Asus/GardenerOS/user/src/bin/00hello_world.rs /mnt/c/Users/Asus/GardenerOS/user/src/console.rs /mnt/c/Users/Asus/GardenerOS/user/src/lang_items.rs /mnt/c/Users/Asus/GardenerOS/user/src/lib.rs /mnt/c/Users/Asus/GardenerOS/user/src/syscall.rs
