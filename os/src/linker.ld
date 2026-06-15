@@ -5,44 +5,43 @@ BASE_ADDRESS = 0x80200000;
 SECTIONS
 {
     . = BASE_ADDRESS;
-
     skernel = .;
-    stext = .;
 
+    stext = .;
     .text : {
         *(.text.entry)
         *(.text .text.*)
+        
+        /* 核心修改：在 .text 段末尾强制一页（4096字节）对齐，并导出 strampoline 地址 */
+        . = ALIGN(4096);
+        strampoline = .;
+        *(.text.trampoline)
+        . = ALIGN(4096);
     }
 
-    . = ALIGN(4K);
     etext = .;
     srodata = .;
-
     .rodata : {
         *(.rodata .rodata.*)
         *(.srodata .srodata.*)
     }
 
-    . = ALIGN(4K);
     erodata = .;
     sdata = .;
-
     .data : {
         *(.data .data.*)
         *(.sdata .sdata.*)
     }
 
-    . = ALIGN(4K);
     edata = .;
-
     .bss : {
         *(.bss.stack)
+        sbss_with_stack = .;
         sbss = .;
         *(.bss .bss.*)
         *(.sbss .sbss.*)
     }
 
-    . = ALIGN(4K);
     ebss = .;
     ekernel = .;
 
