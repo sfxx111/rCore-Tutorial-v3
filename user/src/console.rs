@@ -1,6 +1,8 @@
+use super::read;
 use core::fmt::{self, Write};
 use super::write;
 
+const STDIN: usize = 0;
 const STDOUT: usize = 1;
 
 struct Stdout;
@@ -10,6 +12,12 @@ impl Write for Stdout {
         write(STDOUT, s.as_bytes());
         Ok(())
     }
+}
+
+pub fn getchar() -> u8 {
+    let mut c = [0u8; 1];
+    read(STDIN, &mut c);
+    c[0]
 }
 
 pub fn print(args: fmt::Arguments) {

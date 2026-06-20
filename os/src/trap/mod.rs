@@ -39,33 +39,25 @@ fn set_user_trap_entry() {
 #[no_mangle]
 pub fn trap_handler() -> ! {
     set_kernel_trap_entry();
-    
-    let cx = current_trap_cx();
+    let cx = crate::task::current_trap_cx(); // 实时动态获取当前进程最新上下文指针
     let scause = scause::read();
     let stval = stval::read();
-
+    
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => {
             cx.sepc += 4;
-            cx.x[10] = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]) as usize;
-        }
-        Trap::Exception(Exception::StoreFault) 
-        | Trap::Exception(Exception::StorePageFault)
-        | Trap::Exception(Exception::InstructionPageFault)
-        | Trap::Exception(Exception::LoadPageFault) => {
-            println!("[kernel] PageFault in application, core dumped.");
-            exit_current_and_run_next();
-        }
-        Trap::Exception(Exception::IllegalInstruction) => {
-            println!("[kernel] IllegalInstruction in application, core dumped.");
-            exit_current_and_run_next();
+            // 进行系统调用分发，返回值存入 result
+            let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]);
+            // 注意：因为 exec 会彻底修改控制块内的上下文，在此处必须重新捕获最新 cx！
+            let cx = crate::task::current_trap_cx();
+            cx.x[10] = result as usize;
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            set_next_trigger();
-            suspend_current_and_run_next();
+            timer::set_next_trigger();
+            crate::task::suspend_current_and_run_next();
         }
         _ => {
-            panic!("Unsupported trap {:?}, stval = {:#x}!", scause.cause(), stval);
+            panic!("Unsupported trap: {:?}, stval = {:#x}!", scause.cause(), stval);
         }
     }
     trap_return();

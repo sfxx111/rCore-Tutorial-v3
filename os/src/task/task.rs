@@ -1,77 +1,145 @@
+// os/src/task/task.rs
 use super::TaskContext;
-use crate::mm::{MapPermission, MemorySet, PhysPageNum, KERNEL_SPACE};
-use crate::config::{TRAP_CONTEXT, kernel_stack_position};
+use super::pid::{PidHandle, kernel_stack_position, KernelStack, pid_alloc};
+use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::trap::TrapContext;
+use alloc::sync::{Arc, Weak};
+use alloc::vec::Vec;
+use spin::{Mutex, MutexGuard};
+
+pub struct TaskControlBlock {
+    pub pid: PidHandle,
+    pub kernel_stack: KernelStack,
+    inner: Mutex<TaskControlBlockInner>,
+}
+
+pub struct TaskControlBlockInner {
+    pub trap_cx_ppn: PhysPageNum,
+    pub base_size: usize,
+    pub task_cx: TaskContext,
+    pub task_status: TaskStatus,
+    pub memory_set: MemorySet,
+    pub parent: Option<Weak<TaskControlBlock>>,
+    pub children: Vec<Arc<TaskControlBlock>>,
+    pub exit_code: i32,
+}
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum TaskStatus {
     Ready,
     Running,
-    Exited,
+    Zombie,
 }
 
-pub struct TaskControlBlock {
-    pub task_status: TaskStatus,
-    pub task_cx: TaskContext,
-    pub memory_set: MemorySet,
-    pub trap_cx_ppn: PhysPageNum,
-    pub base_size: usize,
+impl TaskControlBlockInner {
+    pub fn get_trap_cx(&self) -> &'static mut TrapContext {
+        self.trap_cx_ppn.get_mut()
+    }
+    pub fn get_user_token(&self) -> usize {
+        self.memory_set.token()
+    }
+    pub fn is_zombie(&self) -> bool {
+        self.task_status == TaskStatus::Zombie
+    }
 }
 
 impl TaskControlBlock {
-    pub fn new(elf_data: &[u8], app_id: usize) -> Self {
-        // 1. 解析用户的二进制 ELF 文件，并创建独立的用户态三级页表映射空间
+    pub fn inner_exclusive_access(&self) -> MutexGuard<TaskControlBlockInner> {
+        self.inner.lock()
+    }
+    
+    pub fn new(elf_data: &[u8]) -> Self {
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
-
-        // 2. 查阅用户的页表映射，定位到 TRAP_CONTEXT 对应的物理页号
         let trap_cx_ppn = memory_set
-            .page_table
-            .translate(TRAP_CONTEXT.into())
+            .translate(VirtAddr::from(crate::config::TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
-
-        let task_status = TaskStatus::Ready;
-
-        let (kernel_stack_bottom, kernel_stack_top) = kernel_stack_position(app_id);
-        KERNEL_SPACE
-            .exclusive_access()
-            .insert_framed_area(
-                kernel_stack_bottom.into(),
-                kernel_stack_top.into(),
-                MapPermission::R | MapPermission::W,
-            );
-        let kernel_sp = kernel_stack_top;
+        let pid_handle = pid_alloc();
+        let kernel_stack = KernelStack::new(&pid_handle);
+        let kernel_stack_top = kernel_stack.get_top();
         
-        let task_cx = TaskContext::goto_trap_return(kernel_sp);
-
-        let tcb = Self {
-            task_status,
-            task_cx,
-            memory_set,
-            trap_cx_ppn,
-            base_size: user_sp,
+        let task_control_block = Self {
+            pid: pid_handle,
+            kernel_stack,
+            inner: Mutex::new(TaskControlBlockInner {
+                trap_cx_ppn,
+                base_size: user_sp,
+                task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+                task_status: TaskStatus::Ready,
+                memory_set,
+                parent: None,
+                children: Vec::new(),
+                exit_code: 0,
+            }),
         };
-
-        // 4. 在刚刚映射的物理页帧上，写入定制的 TrapContext 初始值
-        let trap_cx = tcb.get_trap_cx();
+        
+        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            KERNEL_SPACE.exclusive_access().token(),
-            kernel_sp,
+            KERNEL_SPACE.lock().token(),
+            kernel_stack_top,
             crate::trap::trap_handler as usize,
         );
-
-        tcb
+        task_control_block
     }
 
-    // 通过物理页号直接计算内核中的裸指针
-    pub fn get_trap_cx(&self) -> &'static mut TrapContext {
-        let paddr: usize = self.trap_cx_ppn.0 << 12;
-        unsafe { (paddr as *mut TrapContext).as_mut().unwrap() }
+    pub fn fork(self: &Arc<TaskControlBlock>) -> Arc<TaskControlBlock> {
+        let mut parent_inner = self.inner_exclusive_access();
+        let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(crate::config::TRAP_CONTEXT).into())
+            .unwrap()
+            .ppn();
+        let pid_handle = pid_alloc();
+        let kernel_stack = KernelStack::new(&pid_handle);
+        let kernel_stack_top = kernel_stack.get_top();
+        
+        let task_cx = TaskContext::goto_trap_return(kernel_stack_top);
+        let child_tcb = Arc::new(TaskControlBlock {
+            pid: pid_handle,
+            kernel_stack,
+            inner: Mutex::new(TaskControlBlockInner {
+                trap_cx_ppn,
+                base_size: parent_inner.base_size,
+                task_cx,
+                task_status: TaskStatus::Ready,
+                memory_set,
+                parent: Some(Arc::downgrade(self)),
+                children: Vec::new(),
+                exit_code: 0,
+            }),
+        });
+        
+        parent_inner.children.push(child_tcb.clone());
+        let child_inner = child_tcb.inner_exclusive_access();
+        let trap_cx = child_inner.get_trap_cx();
+        trap_cx.kernel_sp = kernel_stack_top;
+        
+        child_tcb
     }
 
-    pub fn get_user_token(&self) -> usize {
-        self.memory_set.token()
+    pub fn exec(&self, elf_data: &[u8]) {
+        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(crate::config::TRAP_CONTEXT).into())
+            .unwrap()
+            .ppn();
+        let mut inner = self.inner_exclusive_access();
+        inner.memory_set = memory_set;
+        inner.trap_cx_ppn = trap_cx_ppn;
+        inner.base_size = user_sp;
+        let trap_cx = inner.get_trap_cx();
+        *trap_cx = TrapContext::app_init_context(
+            entry_point,
+            user_sp,
+            KERNEL_SPACE.lock().token(),
+            self.kernel_stack.get_top(),
+            crate::trap::trap_handler as usize,
+        );
+    }
+
+    pub fn getpid(&self) -> usize {
+        self.pid.0
     }
 }

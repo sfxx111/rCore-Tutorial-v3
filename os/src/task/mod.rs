@@ -1,138 +1,73 @@
 // os/src/task/mod.rs
-
 mod context;
+mod pid;
 mod task;
+mod manager;
+mod processor;
 
-use crate::sync::UPSafeCell;
+use crate::loader::get_app_data_by_name;
+use alloc::sync::Arc;
 use lazy_static::*;
-use alloc::vec::Vec;
-use core::arch::global_asm;
 
 pub use context::TaskContext;
 pub use task::{TaskControlBlock, TaskStatus};
-
-global_asm!(include_str!("switch.S"));
-
-extern "C" {
-    fn __switch(current_task_cx_ptr: *mut TaskContext, next_task_cx_ptr: *const TaskContext);
-}
-
-pub struct TaskManager {
-    num_app: usize,
-    inner: UPSafeCell<TaskManagerInner>,
-}
-
-pub struct TaskManagerInner {
-    tasks: Vec<TaskControlBlock>,
-    current_task: usize,
-}
+pub use manager::add_task;
+pub use processor::{
+    run_tasks, current_task, current_user_token, current_trap_cx, take_current_task
+};
 
 lazy_static! {
-    pub static ref TASK_MANAGER: TaskManager = {
-        // 🌟 完美修复：直接调用第4章 loader 模块的公开接口，彻底抛弃老旧的汇编符号 _num_app
-        let num_app = crate::loader::get_num_app();
-        let mut tasks = Vec::new();
-        for i in 0..num_app {
-            tasks.push(TaskControlBlock::new(crate::loader::get_app_data(i), i));
-        }
-        TaskManager {
-            num_app,
-            inner: unsafe {
-                UPSafeCell::new(TaskManagerInner {
-                    tasks,
-                    current_task: 0,
-                })
-            },
-        }
-    };
+    pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new(
+        TaskControlBlock::new(get_app_data_by_name("initproc").unwrap())
+    );
 }
 
-impl TaskManager {
-    pub fn run_first_task(&self) {
-        let mut inner = self.inner.exclusive_access();
-        let next_task_cx_ptr = &inner.tasks[0].task_cx as *const TaskContext;
-        inner.current_task = 0;
-        inner.tasks[0].task_status = TaskStatus::Running;
-
-        let mut _unused = TaskContext::zero_init();
-        let current_task_cx_ptr = &mut _unused as *mut TaskContext;
-
-        drop(inner);
-        unsafe {
-            __switch(current_task_cx_ptr, next_task_cx_ptr);
-        }
-    }
-
-    fn mark_current_suspended(&self) {
-        let mut inner = self.inner.exclusive_access();
-        let current = inner.current_task;
-        inner.tasks[current].task_status = TaskStatus::Ready;
-    }
-
-    fn mark_current_exited(&self) {
-        let mut inner = self.inner.exclusive_access();
-        let current = inner.current_task;
-        inner.tasks[current].task_status = TaskStatus::Exited;
-    }
-
-    fn find_next_task(&self) -> Option<usize> {
-        let inner = self.inner.exclusive_access();
-        let current = inner.current_task;
-        (current + 1..current + 1 + self.num_app)
-            .map(|id| id % self.num_app)
-            .find(|id| inner.tasks[*id].task_status == TaskStatus::Ready)
-    }
-
-    fn run_next_task(&self) {
-        if let Some(next) = self.find_next_task() {
-            let mut inner = self.inner.exclusive_access();
-            let current = inner.current_task;
-            inner.tasks[current].task_status = TaskStatus::Ready;
-            inner.tasks[next].task_status = TaskStatus::Running;
-            inner.inner_run_next_task(next);
-        } else {
-            println!("All applications completed!");
-            crate::sbi::shutdown();
-        }
-    }
-}
-
-impl TaskManagerInner {
-    fn inner_run_next_task(&mut self, next: usize) {
-        let current = self.current_task;
-        self.current_task = next;
-        let current_task_cx_ptr = &mut self.tasks[current].task_cx as *mut TaskContext;
-        let next_task_cx_ptr = &self.tasks[next].task_cx as *const TaskContext;
-        drop(self);
-        unsafe {
-            __switch(current_task_cx_ptr, next_task_cx_ptr);
-        }
-    }
-}
-
-// ======================== 全局公开接口 ========================
-
-pub fn current_user_token() -> usize {
-    let inner = TASK_MANAGER.inner.exclusive_access();
-    inner.tasks[inner.current_task].get_user_token()
-}
-
-pub fn current_trap_cx() -> &'static mut crate::trap::TrapContext {
-    let inner = TASK_MANAGER.inner.exclusive_access();
-    inner.tasks[inner.current_task].get_trap_cx()
+pub fn add_initproc() {
+    add_task(INITPROC.clone());
 }
 
 pub fn suspend_current_and_run_next() {
-    TASK_MANAGER.mark_current_suspended();
-    TASK_MANAGER.run_next_task();
+    let task = take_current_task().unwrap();
+    let mut task_inner = task.inner_exclusive_access();
+    let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
+    task_inner.task_status = TaskStatus::Ready;
+    drop(task_inner);
+    
+    add_task(task);
+    let mut processor = PROCESSOR.lock();
+    let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
+    drop(processor);
+    
+    unsafe { __switch(task_cx_ptr, idle_task_cx_ptr); }
 }
 
-pub fn exit_current_and_run_next() {
-    TASK_MANAGER.mark_current_exited();
-    TASK_MANAGER.run_next_task();
+pub fn exit_current_and_run_next(exit_code: i32) {
+    let task = take_current_task().unwrap();
+    let mut shortcut = task.inner_exclusive_access();
+    shortcut.task_status = TaskStatus::Zombie;
+    shortcut.exit_code = exit_code;
+    
+    {
+        let mut initproc_inner = INITPROC.inner_exclusive_access();
+        for child in shortcut.children.iter() {
+            child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
+            initproc_inner.children.push(child.clone());
+        }
+    }
+    shortcut.children.clear();
+    shortcut.memory_set.recycle_data_pages();
+    drop(shortcut);
+    drop(task);
+    
+    let mut processor = PROCESSOR.lock();
+    let mut _unused = TaskContext::zero_init();
+    let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
+    drop(processor);
+    
+    unsafe { __switch(&mut _unused as *mut TaskContext, idle_task_cx_ptr); }
 }
 
-pub fn run_first_task() -> ! {
-    TASK_MANAGER.run_first_task();
-    panic!("Unreachable in run_first_task!");
+use processor::PROCESSOR;
+extern "C" {
+    fn __switch(current_task_cx_ptr: *mut TaskContext, next_task_cx_ptr: *const TaskContext);
 }

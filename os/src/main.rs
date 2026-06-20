@@ -1,3 +1,5 @@
+// os/src/main.rs
+
 #![feature(alloc_error_handler)]
 #![no_std]
 #![no_main]
@@ -42,9 +44,18 @@ pub fn rust_main() -> ! {
     mm::init();
     println!("[kernel] back to world!");
     mm::remap_test();
+    
     trap::init();
+    
+    // 挂载实验 7 的常驻初始进程 initproc (内部会自动拉起并管理 user_shell)
+    task::add_initproc();
+    println!("after initproc!");
+    
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    task::run_first_task();
+    
+    // 移交控制权给实验 7 解耦后的全新多进程处理器核调度循环
+    task::run_tasks();
+    
     panic!("Unreachable in rust_main!");
 }
